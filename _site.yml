@@ -1,0 +1,9 @@
+name: "Covid Report"
+output_dir: "docs"
+navbar:
+  title: "Covid Report"
+  left:
+  - text: "Home"
+    href: index.html
+output:
+  html_document:

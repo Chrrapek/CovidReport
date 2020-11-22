@@ -7,29 +7,43 @@ knit: (function(input_file, encoding) {
  output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
 author: "Marcin Chrapkowicz"
 date: "11/15/2020"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(formattable)
+library(plotly)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r cache=TRUE, echo=FALSE}
+dirty_data <- read.csv("covid-data.csv", header = TRUE, sep=";")
+data <- dirty_data %>%
+  group_by(Admission.time) %>%
+  fill(PATIENT_ID) %>%
+  ungroup() %>%
+  mutate(gender = factor(gender,
+                         levels = c(1, 2, 0),
+                         labels = c("Male", "Female", "Unknown")))
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+summary(data)
 ```
+## Executive summary
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Gender statistics
+```{r echo=FALSE}
+gender_stats <- data %>%
+  select(PATIENT_ID, gender) %>%
+  distinct() %>%
+  group_by(gender) %>%
+  tally(name="Number of cases")
+
+formattable(gender_stats, align=c("c","c"))
+```

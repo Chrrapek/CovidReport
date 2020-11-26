@@ -1678,16 +1678,16 @@ div.tocify {
 <div id="executive-summary" class="section level2">
 <h2>Executive summary</h2>
 </div>
-<div id="all-loaded-packages" class="section level2">
-<h2>All loaded packages</h2>
+<div id="loaded-packages" class="section level2">
+<h2>Loaded packages</h2>
 <pre class="r"><code>(.packages())</code></pre>
-<pre><code>##  [1] &quot;shiny&quot;       &quot;openxlsx&quot;    &quot;plotly&quot;      &quot;ggplot2&quot;     &quot;formattable&quot;
-##  [6] &quot;tidyr&quot;       &quot;dplyr&quot;       &quot;stats&quot;       &quot;graphics&quot;    &quot;grDevices&quot;  
-## [11] &quot;utils&quot;       &quot;datasets&quot;    &quot;methods&quot;     &quot;base&quot;</code></pre>
+<pre><code>##  [1] &quot;corrplot&quot;    &quot;corrr&quot;       &quot;openxlsx&quot;    &quot;plotly&quot;      &quot;ggplot2&quot;    
+##  [6] &quot;formattable&quot; &quot;tidyr&quot;       &quot;dplyr&quot;       &quot;stats&quot;       &quot;graphics&quot;   
+## [11] &quot;grDevices&quot;   &quot;utils&quot;       &quot;datasets&quot;    &quot;methods&quot;     &quot;base&quot;</code></pre>
 </div>
 <div id="data-characteristics" class="section level2">
 <h2>Data characteristics</h2>
-<p>The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a measurement of a certain parameter occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise. For the purpose of analyzing the data columns with more than 85% of NA’s in them are removed from the set since they most likely wouldn’t provide much information about the patient state.</p>
+<p>The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a measurement of a certain parameter occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise.</p>
 <table class="table table-condensed">
 <thead>
 <tr>
@@ -1711,7 +1711,7 @@ Last.discharge
 6120
 </td>
 <td style="text-align:center;">
-48
+84
 </td>
 <td style="text-align:center;">
 2020-01-10 15:52:20
@@ -1726,7 +1726,7 @@ Last.discharge
 <thead>
 <tr>
 <th style="text-align:center;">
-gender
+Gender
 </th>
 <th style="text-align:center;">
 Number of cases
@@ -1752,37 +1752,81 @@ Female
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>data</code></pre>
-<pre><code>## # A tibble: 6,120 x 48
-##    PATIENT_ID   age gender Admission.time      Discharge.time      outcome
-##         &lt;dbl&gt; &lt;dbl&gt; &lt;fct&gt;  &lt;dttm&gt;              &lt;dttm&gt;              &lt;fct&gt;  
-##  1          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  2          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  3          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  4          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  5          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  6          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  7          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  8          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-##  9          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-## 10          1    73 Male   2020-01-30 22:12:47 2020-02-17 12:40:09 Alive  
-## # … with 6,110 more rows, and 42 more variables: hemoglobin &lt;dbl&gt;,
-## #   Serum.chloride &lt;dbl&gt;, `eosinophils(%)` &lt;dbl&gt;, Alkaline.phosphatase &lt;dbl&gt;,
-## #   albumin &lt;dbl&gt;, `basophil(%)` &lt;dbl&gt;, Total.bilirubin &lt;dbl&gt;,
-## #   Platelet.count &lt;dbl&gt;, `monocytes(%)` &lt;dbl&gt;,
-## #   Red.blood.cell.distribution.width &lt;dbl&gt;, `neutrophils(%)` &lt;dbl&gt;,
-## #   total.protein &lt;dbl&gt;, mean.corpuscular.volume &lt;dbl&gt;, hematocrit &lt;dbl&gt;,
-## #   White.blood.cell.count &lt;dbl&gt;,
-## #   mean.corpuscular.hemoglobin.concentration &lt;dbl&gt;, Urea &lt;dbl&gt;,
-## #   lymphocyte.count &lt;dbl&gt;, Red.blood.cell.count &lt;dbl&gt;, Eosinophil.count &lt;dbl&gt;,
-## #   Serum.potassium &lt;dbl&gt;, neutrophils.count &lt;dbl&gt;, Direct.bilirubin &lt;dbl&gt;,
-## #   RBC.distribution.width.SD &lt;dbl&gt;, `(%)lymphocyte` &lt;dbl&gt;,
-## #   Total.cholesterol &lt;dbl&gt;, aspartate.aminotransferase &lt;dbl&gt;, Uric.acid &lt;dbl&gt;,
-## #   `HCO3-` &lt;dbl&gt;, calcium &lt;dbl&gt;, Lactate.dehydrogenase &lt;dbl&gt;,
-## #   monocytes.count &lt;dbl&gt;, globulin &lt;dbl&gt;, `γ-glutamyl.transpeptidase` &lt;dbl&gt;,
-## #   `basophil.count(#)` &lt;dbl&gt;, mean.corpuscular.hemoglobin &lt;dbl&gt;,
-## #   serum.sodium &lt;dbl&gt;, `glutamic-pyruvic.transaminase` &lt;dbl&gt;, eGFR &lt;dbl&gt;,
-## #   creatinine &lt;dbl&gt;, Measurement.time &lt;dttm&gt;, Normalized.time &lt;dttm&gt;</code></pre>
+</div>
+<div id="determining-the-correlation" class="section level2">
+<h2>Determining the correlation</h2>
+<p>To create a correlation matrix all measurements of every patient have to be aggregated into a single row. Hence an aggregation method has to be chosen for columns containing more than one value. In the following block there are three different data frames created. Each of them utilizes a different aggregating method - mean, max and last. The “last” method means that only the most recent data is taken into consideration. Then all of these data frames are used to create three correlation data frames with the use of a package names <em>corrr</em> which allows to omit the phase of creating a correlation matrix and converting it into a data frame.</p>
+<pre class="r"><code>numeric_data_mean &lt;- data %&gt;%
+  group_by(PATIENT_ID) %&gt;%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) %&gt;%
+  select(-PATIENT_ID)</code></pre>
+<pre><code>## `summarise()` ungrouping output (override with `.groups` argument)</code></pre>
+<pre class="r"><code>numeric_data_max &lt;- data %&gt;%
+  group_by(PATIENT_ID) %&gt;%
+  summarise(across(where(is.numeric), median, na.rm = TRUE)) %&gt;%
+  select(-PATIENT_ID)</code></pre>
+<pre><code>## `summarise()` ungrouping output (override with `.groups` argument)</code></pre>
+<pre class="r"><code>numeric_data_last &lt;- data %&gt;%
+  group_by(PATIENT_ID) %&gt;%
+  fill(everything()) %&gt;%
+  select(-PATIENT_ID) %&gt;%
+  filter(row_number() == n()) %&gt;%
+  select(where(is.numeric))</code></pre>
+<pre><code>## Adding missing grouping variables: `PATIENT_ID`</code></pre>
+<pre class="r"><code>correlation_mean &lt;- correlate(numeric_data_mean) %&gt;%
+  focus(outcome) %&gt;%
+  arrange(desc(outcome))  %&gt;%
+  top_n(5)</code></pre>
+<pre><code>## 
+## Correlation method: &#39;pearson&#39;
+## Missing treated using: &#39;pairwise.complete.obs&#39;</code></pre>
+<pre><code>## Selecting by outcome</code></pre>
+<pre class="r"><code>correlation_max &lt;- correlate(numeric_data_max) %&gt;%
+  focus(outcome) %&gt;%
+  arrange(desc(outcome)) %&gt;%
+  top_n(5)</code></pre>
+<pre><code>## 
+## Correlation method: &#39;pearson&#39;
+## Missing treated using: &#39;pairwise.complete.obs&#39;
+## 
+## Selecting by outcome</code></pre>
+<pre class="r"><code>correlation_last &lt;- correlate(numeric_data_last) %&gt;%
+  focus(outcome) %&gt;%
+  arrange(desc(outcome))  %&gt;%
+  top_n(5)</code></pre>
+<pre><code>## 
+## Correlation method: &#39;pearson&#39;
+## Missing treated using: &#39;pairwise.complete.obs&#39;
+## 
+## Selecting by outcome</code></pre>
+<p>The library <em>corrr</em> allows to select concrete attribute that it needs to “focus” on, which means that it will filter out all the correlations not connected to the selected attribute. In this study we want to determine which attributes can cause which outcome of the disease, so the focused attribute is “outcome”. The dataframes are then sorted by the correlation coefficients descendingly and the first 5 rows are selected. The results can be seen below.</p>
+<pre class="r"><code>print(correlation_mean)</code></pre>
+<pre><code>## # A tibble: 5 x 2
+##   term                                outcome
+##   &lt;chr&gt;                                 &lt;dbl&gt;
+## 1 neutrophils...                        0.751
+## 2 High_sensitivity_C.reactive_protein   0.730
+## 3 Lactate_dehydrogenase                 0.695
+## 4 Fibrin_degradation_products           0.692
+## 5 neutrophils_count                     0.687</code></pre>
+<pre class="r"><code>print(correlation_max)</code></pre>
+<pre><code>## # A tibble: 5 x 2
+##   term                                outcome
+##   &lt;chr&gt;                                 &lt;dbl&gt;
+## 1 neutrophils...                        0.747
+## 2 High_sensitivity_C.reactive_protein   0.722
+## 3 neutrophils_count                     0.682
+## 4 Fibrin_degradation_products           0.679
+## 5 Lactate_dehydrogenase                 0.677</code></pre>
+<pre class="r"><code>print(correlation_last)</code></pre>
+<pre><code>## # A tibble: 5 x 2
+##   term                                outcome
+##   &lt;chr&gt;                                 &lt;dbl&gt;
+## 1 PATIENT_ID                            0.864
+## 2 neutrophils...                        0.760
+## 3 High_sensitivity_C.reactive_protein   0.721
+## 4 Lactate_dehydrogenase                 0.691
+## 5 D.D_dimer                             0.677</code></pre>
 </div>
 
 

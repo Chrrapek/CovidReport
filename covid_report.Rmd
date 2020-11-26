@@ -20,38 +20,36 @@ library(formattable)
 library(plotly)
 library(openxlsx)
 library(ggplot2)
+library(corrr)
+library(corrplot)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r cache=TRUE, echo=FALSE}
 file <- download.file("http://www.cs.put.poznan.pl/dbrzezinski/teaching/zed/wuhan_blood_sample_data_Jan_Feb_2020.xlsx", destfile = "covid-data.xlsx")
-dirty_data <- read.xlsx("covid-data.xlsx")
+dirty_data <- read.xlsx("covid-data.xlsx", sep.names="_", check.names = TRUE, fillMergedCells=TRUE)
 firstMeasurementTime <- openxlsx::convertToDateTime(dirty_data[1, ]$RE_DATE)
 data <- dirty_data %>%
-  group_by(Admission.time) %>%
-  fill(PATIENT_ID) %>%
-  ungroup() %>%
   distinct() %>%
   mutate(
-    Measurement.time = openxlsx::convertToDateTime(RE_DATE),
-    Admission.time = openxlsx::convertToDateTime(Admission.time),
-    Discharge.time = openxlsx::convertToDateTime(Discharge.time),
-    outcome = factor(outcome, levels = c(0, 1), labels = c("Alive", "Dead")),
-    gender = factor(gender, levels = c(1, 2), labels=c("Male", "Female"))
+    Measurement_time = openxlsx::convertToDateTime(RE_DATE),
+    Admission_time = openxlsx::convertToDateTime(Admission_time),
+    Discharge_time = openxlsx::convertToDateTime(Discharge_time),
+    outcome_text = factor(outcome, levels = c(0, 1), labels = c("Alive", "Dead")),
+    Gender = factor(gender, levels = c(1, 2), labels=c("Male", "Female")),
   ) %>%
-  select(-RE_DATE)
+  select(-c(RE_DATE))
 
 data <- data %>%
   group_by(PATIENT_ID) %>%
   mutate(
-    patientFirstMeasurement = min(Measurement.time),
-    Normalized.time = Measurement.time - as.numeric(difftime(patientFirstMeasurement, firstMeasurementTime, units = "secs")), 
+    patientFirstMeasurement = min(Measurement_time),
+    Normalized_time = Measurement_time - as.numeric(difftime(patientFirstMeasurement, firstMeasurementTime, units = "secs")), 
   ) %>%
     ungroup() %>%
     select(-patientFirstMeasurement)
 
-data <- data[,!sapply(data, function(x) mean(is.na(x))) > 0.85]
-
+# data <- data[,!sapply(data, function(x) mean(is.na(x))) > 0]
 ```
 
 
@@ -84,7 +82,7 @@ get_patient_plot <- function(col, patient_id) {
   column <- enquo(col)
   patient_data <- get_patients_data(!!column, patient_id)
   patient_data %>%
-    ggplot(aes(x=Normalized.time)) +
+    ggplot(aes(x=Normalized_time)) +
       geom_line(aes(y=!!column))
 }
 ```
@@ -97,7 +95,7 @@ get_patient_plot <- function(col, patient_id) {
 ```
 
 ## Data characteristics
-The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a  measurement of a certain parameter occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise. For the purpose of analyzing the data columns with more than 85% of NA's in them are removed from the set since they most likely wouldn't provide much information about the patient state. Other NA values are omitted when analyzing the data.
+The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a  measurement of a certain parameter occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise. 
 ```{r echo=FALSE}
 numberOfDeaths <- data %>%
   select(PATIENT_ID, outcome) %>%
@@ -108,19 +106,59 @@ numberOfDeaths <- data %>%
 data_stats <- data.frame(
   "Number of rows in the dataset" = nrow(data),
   "Number of columns in the dataset" = ncol(data),
-  "First admission" = min(data$Admission.time),
-  "Last discharge" = max(data$Discharge.time))
+  "First admission" = min(data$Admission_time),
+  "Last discharge" = max(data$Discharge_time))
 gender_stats <- data %>%
-  select(PATIENT_ID, gender) %>%
+  select(PATIENT_ID, Gender) %>%
   distinct() %>%
-  group_by(gender) %>%
+  group_by(Gender) %>%
   tally(name="Number of cases")
 
 formattable(data_stats, align=rep(c("c"), times=4))
 formattable(gender_stats, align=c("c","c"))
 ```
 
-```{r}
+## Determining the correlation
+To create a correlation matrix all measurements of every patient have to be aggregated into a single row. Hence an aggregation method has to be chosen for columns containing more than one value. In the following block there are three different data frames created. Each of them utilizes a different aggregating method - mean, max and last. The "last" method means that only the most recent data is taken into consideration. Then all of these data frames are used to create three correlation data frames with the use of a package names _corrr_  which allows to omit the phase of creating a correlation matrix and converting it into a data frame.
+```{r warning=FALSE}
+numeric_data_mean <- data %>%
+  group_by(PATIENT_ID) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) %>%
+  select(-PATIENT_ID)
 
-data
+numeric_data_max <- data %>%
+  group_by(PATIENT_ID) %>%
+  summarise(across(where(is.numeric), median, na.rm = TRUE)) %>%
+  select(-PATIENT_ID)
+
+numeric_data_last <- data %>%
+  group_by(PATIENT_ID) %>%
+  fill(everything()) %>%
+  select(-PATIENT_ID) %>%
+  filter(row_number() == n()) %>%
+  select(where(is.numeric))
+
+correlation_mean <- correlate(numeric_data_mean) %>%
+  focus(outcome) %>%
+  arrange(desc(outcome))  %>%
+  top_n(5)
+
+correlation_max <- correlate(numeric_data_max) %>%
+  focus(outcome) %>%
+  arrange(desc(outcome)) %>%
+  top_n(5)
+
+correlation_last <- correlate(numeric_data_last) %>%
+  focus(outcome) %>%
+  arrange(desc(outcome))  %>%
+  top_n(5)
+
+```
+
+The library _corrr_ allows to select concrete attribute that it needs to "focus" on, which means that it will filter out all the correlations not connected to the selected attribute. In this study we want to determine which attributes can cause which outcome of the disease, so the focused attribute is "outcome". The dataframes are then sorted by the correlation coefficients descendingly and the first 5 rows are selected. The results can be seen below.
+
+```{r}
+print(correlation_mean)
+print(correlation_max)
+print(correlation_last)
 ```

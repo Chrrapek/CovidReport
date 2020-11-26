@@ -18,32 +18,109 @@ library(dplyr)
 library(tidyr)
 library(formattable)
 library(plotly)
+library(openxlsx)
+library(ggplot2)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r cache=TRUE, echo=FALSE}
-dirty_data <- read.csv("covid-data.csv", header = TRUE, sep=";")
+file <- download.file("http://www.cs.put.poznan.pl/dbrzezinski/teaching/zed/wuhan_blood_sample_data_Jan_Feb_2020.xlsx", destfile = "covid-data.xlsx")
+dirty_data <- read.xlsx("covid-data.xlsx")
+firstMeasurementTime <- openxlsx::convertToDateTime(dirty_data[1, ]$RE_DATE)
 data <- dirty_data %>%
   group_by(Admission.time) %>%
   fill(PATIENT_ID) %>%
   ungroup() %>%
-  mutate(gender = factor(gender,
-                         levels = c(1, 2, 0),
-                         labels = c("Male", "Female", "Unknown")))
+  distinct() %>%
+  mutate(
+    Measurement.time = openxlsx::convertToDateTime(RE_DATE),
+    Admission.time = openxlsx::convertToDateTime(Admission.time),
+    Discharge.time = openxlsx::convertToDateTime(Discharge.time),
+    outcome = factor(outcome, levels = c(0, 1), labels = c("Alive", "Dead")),
+    gender = factor(gender, levels = c(1, 2), labels=c("Male", "Female"))
+  ) %>%
+  select(-RE_DATE)
+
+data <- data %>%
+  group_by(PATIENT_ID) %>%
+  mutate(
+    patientFirstMeasurement = min(Measurement.time),
+    Normalized.time = Measurement.time - as.numeric(difftime(patientFirstMeasurement, firstMeasurementTime, units = "secs")), 
+  ) %>%
+    ungroup() %>%
+    select(-patientFirstMeasurement)
+
+data <- data[,!sapply(data, function(x) mean(is.na(x))) > 0.85]
+
 ```
 
-```{r}
-summary(data)
+
+```{r functions, echo=FALSE}
+get_patient_data <- function(col, patient_id) {
+  column <- enquo(col)
+  data %>%
+    filter(PATIENT_ID == patient_id) %>% 
+    filter(!is.na(!!column)) %>%
+    select(PATIENT_ID, Measurement.time, !!column)
+}
+
+get_multiple_patients_data <- function(col, patient_range) {
+  column <- enquo(col)
+  data %>%
+    filter(PATIENT_ID %in% patient_range) %>%
+    filter(!is.na(!!column)) %>%
+    select(PATIENT_ID, Measurement.time, !!column)
+}
+
+get_patient_data_normalized <- function(col, patient_id) {
+  column <- enquo(col)
+  data %>%
+    filter(PATIENT_ID >= patient_id_from & PATIENT_ID <= patient_id_to) %>% 
+    filter(!is.na(!!column)) %>%
+    select(PATIENT_ID, Normalized.time, !!column)
+}
+
+get_patient_plot <- function(col, patient_id) {
+  column <- enquo(col)
+  patient_data <- get_patients_data(!!column, patient_id)
+  patient_data %>%
+    ggplot(aes(x=Normalized.time)) +
+      geom_line(aes(y=!!column))
+}
 ```
+
 ## Executive summary
 
-## Gender statistics
+## Loaded packages
+```{r}
+(.packages())
+```
+
+## Data characteristics
+The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a  measurement of a certain parameter occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise. For the purpose of analyzing the data columns with more than 85% of NA's in them are removed from the set since they most likely wouldn't provide much information about the patient state. Other NA values are omitted when analyzing the data.
 ```{r echo=FALSE}
+numberOfDeaths <- data %>%
+  select(PATIENT_ID, outcome) %>%
+  distinct() %>%
+  group_by(outcome) %>%
+  tally() 
+
+data_stats <- data.frame(
+  "Number of rows in the dataset" = nrow(data),
+  "Number of columns in the dataset" = ncol(data),
+  "First admission" = min(data$Admission.time),
+  "Last discharge" = max(data$Discharge.time))
 gender_stats <- data %>%
   select(PATIENT_ID, gender) %>%
   distinct() %>%
   group_by(gender) %>%
   tally(name="Number of cases")
 
+formattable(data_stats, align=rep(c("c"), times=4))
 formattable(gender_stats, align=c("c","c"))
+```
+
+```{r}
+
+data
 ```

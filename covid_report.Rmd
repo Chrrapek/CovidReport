@@ -23,6 +23,8 @@ library(ggplot2)
 library(corrr)
 library(corrplot)
 knitr::opts_chunk$set(echo = TRUE)
+options(dplyr.summarise.inform = FALSE)
+options(corrr.correlate.inform = FALSE)
 ```
 
 ```{r cache=TRUE, echo=FALSE}
@@ -48,8 +50,6 @@ data <- data %>%
   ) %>%
     ungroup() %>%
     select(-patientFirstMeasurement)
-
-# data <- data[,!sapply(data, function(x) mean(is.na(x))) > 0]
 ```
 
 
@@ -101,11 +101,15 @@ numberOfDeaths <- data %>%
   select(PATIENT_ID, outcome) %>%
   distinct() %>%
   group_by(outcome) %>%
-  tally() 
+  tally()
+
+decisiveAttrs <- data %>%
+  select(where(is.numeric))
 
 data_stats <- data.frame(
-  "Number of rows in the dataset" = nrow(data),
-  "Number of columns in the dataset" = ncol(data),
+  "Rows in the dataset" = nrow(data),
+  "Columns in the dataset" = ncol(data),
+  "Decisive attributes" = ncol(decisiveAttrs),
   "First admission" = min(data$Admission_time),
   "Last discharge" = max(data$Discharge_time))
 gender_stats <- data %>%
@@ -119,7 +123,7 @@ formattable(gender_stats, align=c("c","c"))
 ```
 
 ## Determining the correlation
-To create a correlation matrix all measurements of every patient have to be aggregated into a single row. Hence an aggregation method has to be chosen for columns containing more than one value. In the following block there are three different data frames created. Each of them utilizes a different aggregating method - mean, max and last. The "last" method means that only the most recent data is taken into consideration. Then all of these data frames are used to create three correlation data frames with the use of a package names _corrr_  which allows to omit the phase of creating a correlation matrix and converting it into a data frame.
+To create a correlation matrix all measurements of every patient have to be aggregated into a single row. Hence an aggregation method must be chosen for columns containing more than one value. In the following block there are three different data frames created. Each of them utilizes a different aggregating method - mean, max and last. The "last" method means that only the most recent data is taken into consideration. Then all of these data frames are used to create three correlation data frames with the use of a package names _corrr_  which allows to omit the phase of creating a correlation matrix and converting it into a data frame. In the following blocks and explainations I will refer to these three methods as "max", "mean" and "last correlations".
 ```{r warning=FALSE}
 numeric_data_mean <- data %>%
   group_by(PATIENT_ID) %>%
@@ -134,31 +138,50 @@ numeric_data_max <- data %>%
 numeric_data_last <- data %>%
   group_by(PATIENT_ID) %>%
   fill(everything()) %>%
-  select(-PATIENT_ID) %>%
   filter(row_number() == n()) %>%
-  select(where(is.numeric))
-
-correlation_mean <- correlate(numeric_data_mean) %>%
-  focus(outcome) %>%
-  arrange(desc(outcome))  %>%
-  top_n(5)
-
-correlation_max <- correlate(numeric_data_max) %>%
-  focus(outcome) %>%
-  arrange(desc(outcome)) %>%
-  top_n(5)
-
-correlation_last <- correlate(numeric_data_last) %>%
-  focus(outcome) %>%
-  arrange(desc(outcome))  %>%
-  top_n(5)
-
+  ungroup() %>%
+  select(where(is.numeric)) %>%
+  select(-PATIENT_ID)
 ```
 
-The library _corrr_ allows to select concrete attribute that it needs to "focus" on, which means that it will filter out all the correlations not connected to the selected attribute. In this study we want to determine which attributes can cause which outcome of the disease, so the focused attribute is "outcome". The dataframes are then sorted by the correlation coefficients descendingly and the first 5 rows are selected. The results can be seen below.
+The library _corrr_ allows to select concrete attribute that it needs to "focus" on, which means that it will filter out all the correlations not connected to the selected attribute. In this study we want to determine which attributes can cause which outcome of the disease, so the focused attribute is "outcome". The results are shown below in a form of bar plots. To maintain readability of the plots only correlations higher than 0.6 or lower than -0.6 are shown. The plots can be clicked to show values of the correlations.
 
-```{r}
-print(correlation_mean)
-print(correlation_max)
-print(correlation_last)
+```{r warning=FALSE}
+# Mean correlation
+p <- correlate(numeric_data_mean, quiet=TRUE) %>%
+  focus(outcome) %>%
+  mutate(term = reorder(term, outcome)) %>%
+  filter(outcome > 0.6 | outcome < -0.6) %>%
+  ggplot(aes(term, outcome)) +
+    geom_col() + coord_flip() +
+    labs(title="Mean correlation")
+
+ggplotly(p)
 ```
+
+```{r warning=FALSE}
+# Max correlation
+p <- correlate(numeric_data_max, quiet=TRUE) %>%
+  focus(outcome) %>%
+  mutate(term = reorder(term, outcome)) %>%
+  filter(outcome > 0.6 | outcome < -0.6) %>%
+  ggplot(aes(term, outcome)) +
+    geom_col() + coord_flip() +
+    labs(title="Max correlation")
+
+ggplotly(p)
+```
+
+```{r warning=FALSE}
+# Last correlation
+p <- correlate(numeric_data_last, quiet=TRUE) %>%
+  focus(outcome) %>%
+  mutate(term = reorder(term, outcome)) %>%
+  filter(outcome > 0.6 | outcome < -0.6) %>%
+  ggplot(aes(term, outcome)) +
+    geom_col() + coord_flip() +
+    labs(title="Last correlation")
+
+ggplotly(p)
+```
+

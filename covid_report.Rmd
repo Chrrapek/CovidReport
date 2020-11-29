@@ -22,12 +22,14 @@ library(openxlsx)
 library(ggplot2)
 library(corrr)
 library(corrplot)
-knitr::opts_chunk$set(echo = TRUE)
+library(crosstalk)
+library(caret)
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
 options(dplyr.summarise.inform = FALSE)
 options(corrr.correlate.inform = FALSE)
 ```
 
-```{r cache=TRUE, echo=FALSE}
+```{r cache=TRUE}
 file <- download.file("http://www.cs.put.poznan.pl/dbrzezinski/teaching/zed/wuhan_blood_sample_data_Jan_Feb_2020.xlsx", destfile = "covid-data.xlsx")
 dirty_data <- read.xlsx("covid-data.xlsx", sep.names="_", check.names = TRUE, fillMergedCells=TRUE)
 firstMeasurementTime <- openxlsx::convertToDateTime(dirty_data[1, ]$RE_DATE)
@@ -40,20 +42,25 @@ data <- dirty_data %>%
     outcome_text = factor(outcome, levels = c(0, 1), labels = c("Alive", "Dead")),
     Gender = factor(gender, levels = c(1, 2), labels=c("Male", "Female")),
   ) %>%
+  rename(
+    neutrophils_percent = neutrophils...,
+    lymphocyte_percent = X...lymphocyte,
+    hsCRP = High_sensitivity_C.reactive_protein
+  ) %>%
   select(-c(RE_DATE))
 
 data <- data %>%
   group_by(PATIENT_ID) %>%
   mutate(
     patientFirstMeasurement = min(Measurement_time),
-    Normalized_time = Measurement_time - as.numeric(difftime(patientFirstMeasurement, firstMeasurementTime, units = "secs")), 
+    Normalized_time = as.numeric(difftime(Measurement_time, patientFirstMeasurement, units = "hours")), 
   ) %>%
     ungroup() %>%
     select(-patientFirstMeasurement)
 ```
 
 
-```{r functions, echo=FALSE}
+```{r functions}
 get_patient_data <- function(col, patient_id) {
   column <- enquo(col)
   data %>%
@@ -95,8 +102,8 @@ get_patient_plot <- function(col, patient_id) {
 ```
 
 ## Data characteristics
-The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a  measurement of a certain parameter occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise. 
-```{r echo=FALSE}
+The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a  measurement of a certain group of parameters occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise. 
+```{r}
 numberOfDeaths <- data %>%
   select(PATIENT_ID, outcome) %>%
   distinct() %>%
@@ -104,7 +111,9 @@ numberOfDeaths <- data %>%
   tally()
 
 decisiveAttrs <- data %>%
-  select(where(is.numeric))
+  select(where(is.numeric)) %>%
+  select(-PATIENT_ID)
+
 
 data_stats <- data.frame(
   "Rows in the dataset" = nrow(data),
@@ -123,14 +132,14 @@ formattable(gender_stats, align=c("c","c"))
 ```
 
 ## Determining the correlation
-To create a correlation matrix all measurements of every patient have to be aggregated into a single row. Hence an aggregation method must be chosen for columns containing more than one value. In the following block there are three different data frames created. Each of them utilizes a different aggregating method - mean, max and last. The "last" method means that only the most recent data is taken into consideration. Then all of these data frames are used to create three correlation data frames with the use of a package names _corrr_  which allows to omit the phase of creating a correlation matrix and converting it into a data frame. In the following blocks and explainations I will refer to these three methods as "max", "mean" and "last correlations".
-```{r warning=FALSE}
+To create a correlation matrix all measurements of every patient have to be aggregated into a single row. Hence an aggregation method must be chosen for columns containing more than one value. In the following block there are three different data frames created. Each of them utilizes a different aggregating method - mean, max and last. The "last" method means that only the most recent data is taken into consideration. Then all of these data frames are used to create three correlation data frames with the use of a package names _corrr_  which allows to omit the phase of creating a correlation matrix and converting it into a data frame. In the following blocks and explanations I will refer to these three methods as "median", "mean" and "last" correlations.
+```{r}
 numeric_data_mean <- data %>%
   group_by(PATIENT_ID) %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE)) %>%
   select(-PATIENT_ID)
 
-numeric_data_max <- data %>%
+numeric_data_median <- data %>%
   group_by(PATIENT_ID) %>%
   summarise(across(where(is.numeric), median, na.rm = TRUE)) %>%
   select(-PATIENT_ID)
@@ -144,44 +153,287 @@ numeric_data_last <- data %>%
   select(-PATIENT_ID)
 ```
 
-The library _corrr_ allows to select concrete attribute that it needs to "focus" on, which means that it will filter out all the correlations not connected to the selected attribute. In this study we want to determine which attributes can cause which outcome of the disease, so the focused attribute is "outcome". The results are shown below in a form of bar plots. To maintain readability of the plots only correlations higher than 0.6 or lower than -0.6 are shown. The plots can be clicked to show values of the correlations.
+The library _corrr_ allows to select concrete attribute that the analysis needs to "focus" on, which means that it will filter out all the correlations not connected to the selected attribute. In this study we want to determine which attributes can cause which outcome of the disease, so the focused attribute is "outcome". The results are shown below in a form of bar plots. To maintain readability of the plots only correlations higher than 0.6 or lower than -0.6 are shown. The bars can be hovered above to show precise values of the correlations.
 
-```{r warning=FALSE}
+```{r}
 # Mean correlation
 p <- correlate(numeric_data_mean, quiet=TRUE) %>%
   focus(outcome) %>%
   mutate(term = reorder(term, outcome)) %>%
   filter(outcome > 0.6 | outcome < -0.6) %>%
-  ggplot(aes(term, outcome)) +
+  ggplot(aes(term, outcome, fill=term)) +
     geom_col() + coord_flip() +
     labs(title="Mean correlation")
 
 ggplotly(p)
 ```
 
-```{r warning=FALSE}
-# Max correlation
-p <- correlate(numeric_data_max, quiet=TRUE) %>%
+```{r}
+# Median correlation
+p <- correlate(numeric_data_median, quiet=TRUE) %>%
   focus(outcome) %>%
   mutate(term = reorder(term, outcome)) %>%
   filter(outcome > 0.6 | outcome < -0.6) %>%
-  ggplot(aes(term, outcome)) +
+  ggplot(aes(term, outcome, fill=term)) +
     geom_col() + coord_flip() +
-    labs(title="Max correlation")
+    labs(title="Median correlation")
 
 ggplotly(p)
 ```
 
-```{r warning=FALSE}
+```{r}
 # Last correlation
 p <- correlate(numeric_data_last, quiet=TRUE) %>%
   focus(outcome) %>%
   mutate(term = reorder(term, outcome)) %>%
   filter(outcome > 0.6 | outcome < -0.6) %>%
-  ggplot(aes(term, outcome)) +
+  ggplot(aes(term, outcome, fill=term)) +
     geom_col() + coord_flip() +
     labs(title="Last correlation")
 
 ggplotly(p)
 ```
 
+The correlation plots show that no matter what the aggregation method is the same group of attributes attributes is correlated to the outcome the strongest. There are some differences, but overall these are the same attributes repeated three times. Because of that the following analysis will focus mostly on neutrophils (percentage), fibrin degradation products (since D-dimer is its subtype it won't be included), lactate dehydrogenase, high-sensitivity C-reactive protein, calcium, prothombin activity, albumin and lymphocyte percentage.
+
+## Analysis of the selected attributes
+
+There are several interactive plots presented in this section. For visualization purposes the timestamp of each measurement was normalized - the difference between the first the actual measurement time and the first measurement that a given patient had. As a result the Normalized_time variable contains the number of hours that had passed from the first examination the patient had had. This approach allows to visualize and compare courses of a certain attribute among numerous patients on a single plot.
+
+### Neutrophils percentage
+```{r}
+neutrophils_data <- data %>%
+    select(PATIENT_ID, Normalized_time, neutrophils_percent, outcome_text) %>%
+    filter(!is.na(neutrophils_percent))
+
+d <- highlight_key(neutrophils_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d, ~outcome_text)
+
+g <- ggplot(d, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=neutrophils_percent, group = PATIENT_ID)) +
+    labs(title="Neutrophils percentage over time")
+
+ggplotly(g)
+```
+A healthy person should have about 55-70% of neutrophils in their body. This plot shows exacly, that deceased patients had very high percentage of neutrophils though the whole course of their treatment. If we look at the patients who lived we can see that their percentage of neutrophils was either in the specified, healthy range or decreased throughout the treatment.
+
+
+### High-sensitivity C-reactive protein
+```{r}
+c_reactive_protein_data <- data %>%
+    select(PATIENT_ID, Normalized_time, hsCRP, outcome_text) %>%
+    filter(!is.na(hsCRP))
+
+d2 <- highlight_key(c_reactive_protein_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d2, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d2, ~outcome_text)
+
+g2 <- ggplot(d2, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=hsCRP, group = PATIENT_ID)) +
+    labs(title="High-sensitivity C-reactive protein over time")
+
+ggplotly(g2)
+```
+
+This plot show some extremely chaotic data concerning deceased patients. There is practically no trend or anything more to say about this data expect for the levels of hsCRP are quite high comparing to these of the patients who lived. If we select only the Alive patients we can see that in almost every case the hsCRP was decreasing over time. This is because hsCRP is a blood test that measures the level of inflammation in one's body, it's used for example for determining the chance of a heart disease or a stroke. High value returned by hsCRP means high inflammation, what makes sense concerning that people with high hsCRP infected with COVID-19 died.
+
+### Fibrin degradation products
+```{r}
+c_fdp_data <- data %>%
+    select(PATIENT_ID, Normalized_time, Fibrin_degradation_products, outcome_text) %>%
+    filter(!is.na(Fibrin_degradation_products))
+
+d3 <- highlight_key(c_fdp_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d3, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d3, ~outcome_text)
+
+g3 <- ggplot(d3, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=Fibrin_degradation_products, group = PATIENT_ID)) +
+    labs(title="Fibrin degradation products over time")
+
+ggplotly(g3)
+```
+
+Fibrin degradation products are components of the blood produced by clot degeneration. The value of FDP is high after any thrombotic event. The chaotic data on the plot might indicate that the patients with high FDP (which are only those who died later on) suffered from some kind of a blood dysfunction.
+
+### Lactate dehydrogenase
+```{r}
+c_ldh_data <- data %>%
+    select(PATIENT_ID, Normalized_time, Lactate_dehydrogenase, outcome_text) %>%
+    filter(!is.na(Lactate_dehydrogenase))
+
+d3 <- highlight_key(c_ldh_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d3, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d3, ~outcome_text)
+
+g3 <- ggplot(d3, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=Lactate_dehydrogenase, group = PATIENT_ID)) +
+    labs(title="Lactate dehydrogenase levels over time")
+
+ggplotly(g3)
+```
+
+Lactate dehydrogenase is an enzyme that is present in almost every living cell. Its high levels (up to 4 times larger in deceased patients than in alive ones) can indicate an early stage of heart attacks and in general are a negative prognostic factor.
+
+### Calcium
+```{r}
+c_calcium_data <- data %>%
+    select(PATIENT_ID, Normalized_time, calcium, outcome_text) %>%
+    filter(!is.na(calcium))
+
+d3 <- highlight_key(c_calcium_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d3, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d3, ~outcome_text)
+
+g3 <- ggplot(d3, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=calcium, group = PATIENT_ID)) +
+    labs(title="Calcium level over time")
+
+ggplotly(g3)
+```
+
+Lower levels of calcium among deceased patients can indicate numerous things, however hypocalcemia can lead to several muscle-oriented problems, such as tetany or even disruption of conductivity in the cardiac tissue. The effect of low calcium levels has been researched and can be read about in [this article](https://www.degruyter.com/view/journals/cclm/58/9/article-pe171.xml).
+
+### Prothrombin activity
+```{r}
+c_pta_data <- data %>%
+    select(PATIENT_ID, Normalized_time, Prothrombin_activity, outcome_text) %>%
+    filter(!is.na(Prothrombin_activity))
+
+d3 <- highlight_key(c_pta_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d3, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d3, ~outcome_text)
+
+g3 <- ggplot(d3, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=Prothrombin_activity, group = PATIENT_ID)) +
+    labs(title="Prothrombin activity level over time")
+
+ggplotly(g3)
+```
+
+Prothrombin is a coagulation factor. This means that its role is to manage the clotting process. Low levels of prothrombin activity are related to fibrin degradation products. Low levels of prothrombin activity that occured among deceased patients can indicate problems with the clotting process.
+
+### Albumin
+```{r}
+c_albumin_data <- data %>%
+    select(PATIENT_ID, Normalized_time, albumin, outcome_text) %>%
+    filter(!is.na(albumin))
+
+d3 <- highlight_key(c_albumin_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d3, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d3, ~outcome_text)
+
+g3 <- ggplot(d3, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=albumin, group = PATIENT_ID)) +
+    labs(title="Albumin level over time", y="Albumin [mg/ml]")
+
+ggplotly(g3)
+```
+
+Albumin is a main protein that occurs in the human blood, being about 60% of all the proteins. Its main role is to maintain proper oncotic pressure, that prevents leakages of water containing electrolytes from the blood vessels into tissues. A healthy person should have albumin level ranging from 30 to 55 mg/ml of blood.
+
+### Lymphocyte percentage
+```{r}
+c_lymphocyte_data <- data %>%
+    select(PATIENT_ID, Normalized_time, lymphocyte_percent, outcome_text) %>%
+    filter(!is.na(lymphocyte_percent))
+
+d3 <- highlight_key(c_lymphocyte_data)
+filter_select("PATIENT_ID", "Select one or more patient IDs:", d3, ~PATIENT_ID)
+filter_checkbox("outcome_text", "Outcome of the patient:", d3, ~outcome_text)
+
+g3 <- ggplot(d3, aes(x=Normalized_time, color=PATIENT_ID)) +
+    geom_line(aes(y=lymphocyte_percent, group = PATIENT_ID)) +
+    labs(title="Lymphocyte percentage over time")
+
+ggplotly(g3)
+```
+
+Lymphocytes are, next to neutroils, one of five kinds of white blood cells. Low levels of lymphocytes can indicate autoimmune diseases, AIDS or other infectious diseases.
+
+## Classification
+
+The dataset for the classification problem cannot contain NA variables if Random Forest is used as a training method.
+
+```{r}
+set.seed(23)
+classificationData <- data %>%
+  group_by(PATIENT_ID) %>%
+  fill(everything()) %>%
+  filter(row_number() == n()) %>%
+  ungroup() %>%
+  select(
+    lymphocyte_percent, 
+    outcome_text,
+    neutrophils_percent,
+    hsCRP,
+    Lactate_dehydrogenase,
+    albumin) %>%
+  drop_na()
+
+inTraining <- 
+    createDataPartition(
+        y = classificationData$outcome_text,
+        p = .7,
+        list = FALSE)
+
+training <- classificationData[ inTraining,]
+testing  <- classificationData[-inTraining,]
+cat("Size of the training set: ", nrow(training))
+cat("Size of the testing set: ", nrow(testing))
+```
+
+### Training without parameter optimaliization
+* **Control parameters for the train function:**
+    * method: repeatedcv (repeated cross-validation)
+    * number of folds: 2,
+    * number of complete sets of folds to compute: 5
+* **The train function parameters:**
+    * Method: Random Forest
+    * Number of trees: 10
+```{r}
+ctrl <- trainControl(
+    method = "repeatedcv",
+    number = 2,
+    repeats = 5)
+
+set.seed(23)
+fit <- train(outcome_text ~ .,
+             data = training,
+             method = "rf",
+             trControl = ctrl,
+             ntree = 10)
+rfClasses <- predict(fit, newdata=testing)
+confusionMatrix(rfClasses, testing$outcome_text)
+```
+
+### Training with parameter optimalization
+
+```{r}
+rfGrid <- expand.grid(mtry = 1:5)
+gridCtrl <- trainControl(
+    method = "repeatedcv",
+    summaryFunction = twoClassSummary,
+    classProbs = TRUE,
+    number = 2,
+    repeats = 5)
+
+set.seed(23)
+fitTune <- train(outcome_text ~ .,
+             data = training,
+             method = "rf",
+             metric = "ROC",
+             preProc = c("center", "scale"),
+             trControl = gridCtrl,
+             tuneGrid = rfGrid,
+             ntree = 30)
+
+rfTuneClasses <- predict(fitTune, newdata = testing)
+confusionMatrix(data = rfTuneClasses, testing$outcome_text)
+
+```
+
+```{r}
+
+```

@@ -95,7 +95,7 @@ get_patient_plot <- function(col, patient_id) {
 ```
 
 ## Executive summary
-
+TODO
 ## Loaded packages
 ```{r}
 (.packages())
@@ -354,7 +354,14 @@ Lymphocytes are, next to neutroils, one of five kinds of white blood cells. Low 
 
 ## Classification
 
-The dataset for the classification problem cannot contain NA variables if Random Forest is used as a training method.
+The dataset for the classification problem cannot contain NA variables if Random Forest is used as a training method. Because of that only several columns were chosen for the classification problem:
+* Lymphocyte percentage
+* Neutrophils percentage
+* High-sensitivity C-reactive protein
+* Lactate dehydrogenase
+* Albumin
+
+These are the attributes that showed the highest correlation with the outcome, as shown in "Determining the correlation" section.
 
 ```{r}
 set.seed(23)
@@ -384,11 +391,11 @@ cat("Size of the training set: ", nrow(training))
 cat("Size of the testing set: ", nrow(testing))
 ```
 
-### Training without parameter optimaliization
+### Training and predicting without parameter optimaliization
 * **Control parameters for the train function:**
-    * method: repeatedcv (repeated cross-validation)
-    * number of folds: 2,
-    * number of complete sets of folds to compute: 5
+    * Method: repeatedcv (repeated cross-validation)
+    * Number of folds: 2,
+    * Number of complete sets of folds to compute: 5
 * **The train function parameters:**
     * Method: Random Forest
     * Number of trees: 10
@@ -404,12 +411,23 @@ fit <- train(outcome_text ~ .,
              method = "rf",
              trControl = ctrl,
              ntree = 10)
+print(fit)
 rfClasses <- predict(fit, newdata=testing)
-confusionMatrix(rfClasses, testing$outcome_text)
+confusionMatrix(rfClasses, testing$outcome_text, mode="prec_recall")
 ```
 
-### Training with parameter optimalization
-
+### Training and predicting with parameter optimalization
+* **Control parameters for the train function:**
+    * Method: repeatedcv (repeated cross-validation)
+    * Summary function: twoClassSummary
+    * Number of folds: 2,
+    * Number of complete sets of folds to compute: 5
+* **The train function parameters:**
+    * Method: Random Forest
+    * Metric: ROC
+    * Number of trees: 30
+    * Tune grid: 1:5
+    * Pre-processing: center, scale
 ```{r}
 rfGrid <- expand.grid(mtry = 1:5)
 gridCtrl <- trainControl(
@@ -429,11 +447,20 @@ fitTune <- train(outcome_text ~ .,
              tuneGrid = rfGrid,
              ntree = 30)
 
+print(fitTune)
+
 rfTuneClasses <- predict(fitTune, newdata = testing)
-confusionMatrix(data = rfTuneClasses, testing$outcome_text)
+confusionMatrix(data = rfTuneClasses, testing$outcome_text, mode="prec_recall")
 
 ```
+Accuracy is 1 percentage point better than before parameter tuning, Kappa value is 0,02 higher, values of the remaining measures are the same or higher than before. Because of a very high accuracy of the Random Forest method no further methods were tested.
+
+Both high precision and recall mean that the classificator performs well, since it doesn't return much false positives or false negatives. Not detecting ill people can be however quite problematic since it could increase the strain on the medical system even more.
+
+## Importance of the attributes of the final model
 
 ```{r}
-
+varImp(fitTune, scale=FALSE)
 ```
+
+The trained model shows that lactate dehydrogenase levels have the largest impact in defining whether a patient will die or not. High-sensitivity C-reactive protein is more than 2 times less important and the neutrophils percentage comes in at the third place. This outcome is confirmed by the [article from which the dataset was downloaded](https://www.nature.com/articles/s42256-020-0180-7). 

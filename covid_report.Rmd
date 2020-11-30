@@ -374,6 +374,7 @@ Lymphocytes are, next to neutroils, one of five kinds of white blood cells. Low 
 ## Classification
 
 The dataset for the classification problem cannot contain NA variables if Random Forest is used as a training method. Because of that only several columns were chosen for the classification problem:
+
 * Lymphocyte percentage
 * Neutrophils percentage
 * High-sensitivity C-reactive protein

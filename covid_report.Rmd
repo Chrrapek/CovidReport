@@ -14,6 +14,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+library(knitr)
 library(dplyr)
 library(tidyr)
 library(formattable)
@@ -24,9 +25,18 @@ library(corrr)
 library(corrplot)
 library(crosstalk)
 library(caret)
+library(kableExtra)
 knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
+options(knitr.kable.NA = '')
 options(dplyr.summarise.inform = FALSE)
 options(corrr.correlate.inform = FALSE)
+```
+
+```{css}
+.table>tbody>tr>td:first-of-type {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
 ```
 
 ```{r cache=TRUE}
@@ -95,14 +105,19 @@ get_patient_plot <- function(col, patient_id) {
 ```
 
 ## Executive summary
-TODO
+
+The main goal of this report is to try to unravel which symptoms of COVID-19 disease are most likely to lead to death. In order to do that a dataset was downloaded and used in the following analysis. The process of gathering this data is described in [this article](https://www.nature.com/articles/s42256-020-0180-7).
+
+The analysis consists of a short data characteristics section followed by four main parts. In the first section an attempt is made to deremine which attributes are correlated the strongest to the outcome of the patient (dead or aliv[e](https://www.youtube.com/watch?v=PGNiXGX2nLU)). Next comes a section that includes an interactive plot for each of the attributes from the previous section. There is also a short explaination of what these attributes mean biologically and why they may be correlated to the outcome. The third section is a classification attempt. Based on the most correlated attributes there is an attempt to train the random forest classification algorithm to classify patients to a certain group (dead or alive). The final accuracy odf the created model is 97%, despite being based only on six attributes from all the 78 from the original dataset. The last section shows which variables happened to be the most important in the classification process. It seems that the lactate dehydrogenase variable had the biggest impact on the process with importance value of 74.6, while the second important variable was High-sensitivity C-reactive protein with value more than 2 times smaller (27,2). This outcome is corresponding to the article linked earlier as the same attributes were used in analysis performed by its author, which leads to a conclusion of this report being meaningful.
+
 ## Loaded packages
 ```{r}
 (.packages())
 ```
 
 ## Data characteristics
-The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a  measurement of a certain group of parameters occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise. 
+The provided data is organized in such a way, that for each patient there are several rows. Each one of them describes a single moment of time in which a  measurement of a certain group of parameters occurred. Because of this approach there are a lot of NA values in the data both rowwise and columnwise (not every parameter was measured during a single examination).
+
 ```{r}
 numberOfDeaths <- data %>%
   select(PATIENT_ID, outcome) %>%
@@ -118,7 +133,7 @@ decisiveAttrs <- data %>%
 data_stats <- data.frame(
   "Rows in the dataset" = nrow(data),
   "Columns in the dataset" = ncol(data),
-  "Decisive attributes" = ncol(decisiveAttrs),
+  "Numeric attributes" = ncol(decisiveAttrs),
   "First admission" = min(data$Admission_time),
   "Last discharge" = max(data$Discharge_time))
 gender_stats <- data %>%
@@ -129,6 +144,10 @@ gender_stats <- data %>%
 
 formattable(data_stats, align=rep(c("c"), times=4))
 formattable(gender_stats, align=c("c","c"))
+summaryTable <- kbl(t(summary(data))) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+summaryTable <- add_header_above(summaryTable, c("Attribute", "Min. value", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max. value", "NA's"), bold=TRUE)
+column_spec(summaryTable, 1, bold=TRUE, width_max="10em", width="10em")
 ```
 
 ## Determining the correlation
@@ -463,4 +482,4 @@ Both high precision and recall mean that the classificator performs well, since 
 varImp(fitTune, scale=FALSE)
 ```
 
-The trained model shows that lactate dehydrogenase levels have the largest impact in defining whether a patient will die or not. High-sensitivity C-reactive protein is more than 2 times less important and the neutrophils percentage comes in at the third place. This outcome is confirmed by the [article from which the dataset was downloaded](https://www.nature.com/articles/s42256-020-0180-7). 
+The trained model shows that lactate dehydrogenase levels have the largest impact in defining whether a patient will die or not. High-sensitivity C-reactive protein is more than 2 times less important and the neutrophils percentage comes in at the third place. This outcome is confirmed by the [article from which the dataset originates from](https://www.nature.com/articles/s42256-020-0180-7). 
